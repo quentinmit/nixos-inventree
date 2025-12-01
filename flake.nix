@@ -42,6 +42,80 @@
       treefmt-nix,
       ...
     }:
+    let
+      pyprojectOverrides = final: prev: {
+        weasyprint = final.hacks.nixpkgsPrebuilt {
+          from = final.python.pkgs.weasyprint;
+        };
+
+        # Seems packages aren't generally available unless they are explicitly
+        # specified in an overlay?
+        binaryornot = final.hacks.nixpkgsPrebuilt {
+          from = final.python.pkgs.binaryornot;
+        };
+        #binaryornot = prev.binaryornot;
+
+        django-allauth = prev.django-allauth.overrideAttrs (old: {
+          buildInputs = (old.buildInputs or [ ]) ++ [
+            prev.setuptools
+            prev.wheel
+          ];
+        });
+
+        django-mailbox = prev.django-mailbox.overrideAttrs (old: {
+          buildInputs = (old.buildInputs or [ ]) ++ [
+            prev.setuptools
+            prev.wheel
+          ];
+        });
+
+        django-xforwardedfor-middleware = prev.django-xforwardedfor-middleware.overrideAttrs (old: {
+          buildInputs = (old.buildInputs or [ ]) ++ [
+            prev.setuptools
+            prev.wheel
+          ];
+        });
+
+        dj-rest-auth = prev.dj-rest-auth.overrideAttrs (old: {
+          buildInputs = (old.buildInputs or [ ]) ++ [
+            prev.setuptools
+            prev.wheel
+          ];
+        });
+
+        odfpy = prev.odfpy.overrideAttrs (old: {
+          buildInputs = (old.buildInputs or [ ]) ++ [
+            prev.setuptools
+            prev.wheel
+          ];
+        });
+
+        sgmllib3k = prev.sgmllib3k.overrideAttrs (old: {
+          buildInputs = (old.buildInputs or [ ]) ++ [
+            prev.setuptools
+            prev.wheel
+          ];
+        });
+
+        coreschema = prev.coreschema.overrideAttrs (old: {
+          buildInputs = (old.buildInputs or [ ]) ++ [
+            prev.setuptools
+            prev.wheel
+          ];
+        });
+
+        invoke = prev.invoke.overrideAttrs (old: {
+          buildInputs = (old.buildInputs or [ ]) ++ [
+            prev.setuptools
+            prev.wheel
+          ];
+        });
+
+        # Plugins
+        # TODO: is there a nice way to not have to inherit prev?
+        inventree-kicad-plugin = (final.callPackage ./plugins/inventree-kicad-plugin.nix { inherit prev; });
+      };
+    in
     flake-utils.lib.eachDefaultSystem (
       system:
       let
@@ -50,104 +124,6 @@
           overlays = [ self.overlays.default ];
         };
         inherit (nixpkgs) lib;
-        python = pkgs.python312;
-
-        hacks = pkgs.callPackage pyproject-nix.build.hacks { };
-
-        workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./.; };
-
-        overlay = workspace.mkPyprojectOverlay {
-          sourcePreference = "wheel";
-        };
-
-        pyprojectOverrides = final: prev: {
-          weasyprint = hacks.nixpkgsPrebuilt {
-            from = python.pkgs.weasyprint;
-          };
-
-          # Seems packages aren't generally available unless they are explicitly
-          # specified in an overlay?
-          binaryornot = hacks.nixpkgsPrebuilt {
-            from = python.pkgs.binaryornot;
-          };
-          #binaryornot = prev.binaryornot;
-
-          django-allauth = prev.django-allauth.overrideAttrs (old: {
-            buildInputs = (old.buildInputs or [ ]) ++ [
-              prev.setuptools
-              prev.wheel
-            ];
-          });
-
-          django-mailbox = prev.django-mailbox.overrideAttrs (old: {
-            buildInputs = (old.buildInputs or [ ]) ++ [
-              prev.setuptools
-              prev.wheel
-            ];
-          });
-
-          django-xforwardedfor-middleware = prev.django-xforwardedfor-middleware.overrideAttrs (old: {
-            buildInputs = (old.buildInputs or [ ]) ++ [
-              prev.setuptools
-              prev.wheel
-            ];
-          });
-
-          dj-rest-auth = prev.dj-rest-auth.overrideAttrs (old: {
-            buildInputs = (old.buildInputs or [ ]) ++ [
-              prev.setuptools
-              prev.wheel
-            ];
-          });
-
-          odfpy = prev.odfpy.overrideAttrs (old: {
-            buildInputs = (old.buildInputs or [ ]) ++ [
-              prev.setuptools
-              prev.wheel
-            ];
-          });
-
-          sgmllib3k = prev.sgmllib3k.overrideAttrs (old: {
-            buildInputs = (old.buildInputs or [ ]) ++ [
-              prev.setuptools
-              prev.wheel
-            ];
-          });
-
-          coreschema = prev.coreschema.overrideAttrs (old: {
-            buildInputs = (old.buildInputs or [ ]) ++ [
-              prev.setuptools
-              prev.wheel
-            ];
-          });
-
-          invoke = prev.invoke.overrideAttrs (old: {
-            buildInputs = (old.buildInputs or [ ]) ++ [
-              prev.setuptools
-              prev.wheel
-            ];
-          });
-
-          # Plugins
-          # TODO: is there a nice way to not have to inherit prev?
-          inventree-kicad-plugin = (final.callPackage ./plugins/inventree-kicad-plugin.nix { inherit prev; });
-        };
-
-        pythonSet =
-          (pkgs.callPackage pyproject-nix.build.packages {
-            inherit python;
-          }).overrideScope
-            (
-              lib.composeManyExtensions [
-                pyproject-build-systems.overlays.default
-                overlay
-                pyprojectOverrides
-              ]
-            );
-
-        venvWithPlugins = (
-          plugins: pythonSet.mkVirtualEnv "inventree-python" (workspace.deps.default // plugins)
-        );
 
         treefmtEval = treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
       in
@@ -166,7 +142,7 @@
             refresh-users
             gen-secret
             ;
-          venv = (venvWithPlugins { inventree-kicad-plugin = [ ]; });
+          venv = pkgs.inventree.pythonWithPackages;
         };
         devShells = rec {
           uv = pkgs.mkShell {
@@ -178,7 +154,7 @@
               UV_NO_SYNC = "1";
 
               # Force uv to use nixpkgs Python interpreter
-              UV_PYTHON = python.interpreter;
+              UV_PYTHON = pkgs.python312.interpreter;
 
               # Prevent uv from downloading managed Python's
               UV_PYTHON_DOWNLOADS = "never";
@@ -200,7 +176,30 @@
       overlays.default = (
         final: prev: {
           inventree = final.lib.makeScope final.newScope (_self: {
-            pythonWithPackages = self.packages.${prev.pkgs.stdenv.hostPlatform.system}.venv;
+            hacks = _self.callPackage pyproject-nix.build.hacks { };
+            workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./.; };
+            packageOverrides = nixpkgs.lib.composeManyExtensions [
+              pyproject-build-systems.overlays.default
+              (_self.workspace.mkPyprojectOverlay {
+                sourcePreference = "wheel";
+              })
+              (_: _: {
+                inherit (_self) hacks;
+              })
+              pyprojectOverrides
+            ];
+
+            venvWithPlugins =
+              let
+                pythonSet =
+                  (_self.callPackage pyproject-nix.build.packages {
+                    python = final.python312;
+                  }).overrideScope
+                    _self.packageOverrides;
+              in
+              plugins: pythonSet.mkVirtualEnv "inventree-python" (_self.workspace.deps.default // plugins);
+
+            pythonWithPackages = _self.venvWithPlugins { inventree-kicad-plugin = [ ]; };
 
             src = _self.callPackage ./pkgs/src.nix { };
             server = _self.callPackage ./pkgs/server.nix { };
